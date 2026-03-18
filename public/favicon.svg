@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="boxTop" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f7d08a"/>
+      <stop offset="1" stop-color="#eab55a"/>
+    </linearGradient>
+    <linearGradient id="boxSide" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#d9933c"/>
+      <stop offset="1" stop-color="#c07a28"/>
+    </linearGradient>
+    <linearGradient id="boxFront" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#e6a94b"/>
+      <stop offset="1" stop-color="#d38f33"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Top flap -->
+  <path d="M32 6 8 18l24 12 24-12L32 6Z" fill="url(#boxTop)"/>
+  <!-- Left side -->
+  <path d="M8 18v28l24 12V30L8 18Z" fill="url(#boxSide)"/>
+  <!-- Front/right side -->
+  <path d="M56 18v28L32 58V30l24-12Z" fill="url(#boxFront)"/>
+
+  <!-- Tape -->
+  <path d="M30 14 22 18l10 5 10-5-8-4Z" fill="#f3e7d7" opacity=".95"/>
+  <path d="M30 23v30l4 2V25l-4-2Z" fill="#f3e7d7" opacity=".95"/>
+
+  <!-- Outline (crisp at small sizes) -->
+  <path
+    d="M32 6 8 18v28l24 12 24-12V18L32 6Zm0 4.3L50.4 18 32 27.2 13.6 18 32 10.3ZM12 21.2 30 30v23.2L12 44.2V21.2ZM34 53.2V30l18-8.8v23L34 53.2Z"
+    fill="#5a3a12"
+    opacity=".25"
+  />
+</svg>
