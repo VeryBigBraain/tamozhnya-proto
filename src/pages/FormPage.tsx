@@ -390,19 +390,23 @@ export default function FormPage() {
             <Text type="secondary" style={{ display: 'block', marginBottom: 8 }}>
               Сертификат проверяется через ФГИС Росаккредитации (при ошибке — мок по ТНВЭД).
             </Text>
-            <Spin spinning={previewLoading} size="small">
-              {preview && (
-                <Space wrap>
-                  <span>Сертификат:</span>
-                  <CertificateStatusBadge status={preview.metadata.certificateStatus} />
-                  <span style={{ marginLeft: 12 }}>Честный знак:</span>
-                  <ChestnyZnakBadge status={preview.metadata.chestnyZnakStatus} />
-                  <span style={{ marginLeft: 12 }}>СГР:</span>
-                  <SGRStatusBadge status={preview.metadata.sgrStatus} />
-                  <FrontSeatBadge isFrontSeat={preview.isFrontSeat} />
-                </Space>
-              )}
-            </Spin>
+            {/* AntD Spin с обёрткой оверлеит дочерний контент при loading — убираем перекрытие */}
+            {previewLoading && (
+              <div style={{ margin: '4px 0 8px', display: 'flex', alignItems: 'center' }}>
+                <Spin spinning size="small" />
+              </div>
+            )}
+            {preview && (
+              <Space wrap>
+                <span>Сертификат:</span>
+                <CertificateStatusBadge status={preview.metadata.certificateStatus} />
+                <span style={{ marginLeft: 12 }}>Честный знак:</span>
+                <ChestnyZnakBadge status={preview.metadata.chestnyZnakStatus} />
+                <span style={{ marginLeft: 12 }}>СГР:</span>
+                <SGRStatusBadge status={preview.metadata.sgrStatus} />
+                <FrontSeatBadge isFrontSeat={preview.isFrontSeat} />
+              </Space>
+            )}
           </Card>
         )}
 
