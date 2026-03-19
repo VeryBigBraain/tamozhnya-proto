@@ -16,12 +16,12 @@
 
 [[redirects]]
   from = "/fsa-login"
-  to = "/.netlify/functions/fsa-login"
+  to = "https://tamozhnya-proto.onrender.com/fsa-login"
   status = 200
 
 [[redirects]]
   from = "/api/fsa/*"
-  to = "/.netlify/functions/fsa-proxy/:splat"
+  to = "https://tamozhnya-proto.onrender.com/api/fsa/:splat"
   status = 200
 
 [[redirects]]
