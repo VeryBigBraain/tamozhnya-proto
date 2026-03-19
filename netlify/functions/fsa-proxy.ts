@@ -1,5 +1,4 @@
 const FSA_ORIGIN = 'https://pub.fsa.gov.ru';
-const ALLOWED_ENDPOINT = /^\/v1\/rss\/common\/(certificates|declarations)\/get$/;
 
 export async function handler(event: {
   path: string;
@@ -21,15 +20,28 @@ export async function handler(event: {
       ? event.path.slice(fnPrefix.length)
       : event.path;
 
-    if (!ALLOWED_ENDPOINT.test(incomingPath)) {
+    // Netlify local/prod могут передавать путь без/с ведущим "/", а редирект может
+    // оставлять кусок вида "/api/fsa". Нормализуем перед маппингом.
+    let normalizedPath = incomingPath.replace(/^\/+/, '/');
+    normalizedPath = normalizedPath.replace(/^\/api\/fsa/, '');
+
+    const allowed =
+      /^\/v1\/rss\/common\/(certificates|declarations)\/get\/?$/.test(normalizedPath);
+
+    if (!allowed) {
       return {
         statusCode: 400,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ error: 'Unsupported FSA endpoint' }),
+        body: JSON.stringify({
+          error: 'Unsupported FSA endpoint',
+          rawPath: event.path,
+          normalizedPath,
+        }),
       };
     }
 
-    const targetUrl = `${FSA_ORIGIN}/api${incomingPath}`;
+    const finalPath = normalizedPath.replace(/\/$/, '');
+    const targetUrl = `${FSA_ORIGIN}/api${finalPath}`;
     const upstream = await fetch(targetUrl, {
       method: 'POST',
       headers: {
