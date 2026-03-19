@@ -3,6 +3,17 @@
   publish = "dist"
   functions = "netlify/functions"
 
+# To switch FSA traffic to external backend (Render), replace <EXTERNAL_BACKEND_URL> and uncomment:
+# [[redirects]]
+#   from = "/fsa-login"
+#   to = "https://<EXTERNAL_BACKEND_URL>/fsa-login"
+#   status = 200
+#
+# [[redirects]]
+#   from = "/api/fsa/*"
+#   to = "https://<EXTERNAL_BACKEND_URL>/api/fsa/:splat"
+#   status = 200
+
 [[redirects]]
   from = "/fsa-login"
   to = "/.netlify/functions/fsa-login"
