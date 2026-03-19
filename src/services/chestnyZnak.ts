@@ -24,14 +24,42 @@ type ChestnyZnakCheckResponse = {
   error?: string;
 };
 
+const USE_DIRECT_EXTERNAL_APIS = import.meta.env.VITE_USE_DIRECT_EXTERNAL_APIS === 'true';
 const CHECK_ENDPOINT = '/api/chestnyznak/check';
+const DIRECT_CHECK_ENDPOINT =
+  'https://xn--80ajghhoc2aj1c8b.xn--p1ai/bitrix/services/main/ajax.php' +
+  '?mode=class&c=dev%3AcodeSearch&action=getByTnVed';
 
 // Простой TTL-кеш, чтобы не дёргать внешний сервис на каждый ввод.
 const cache = new Map<string, { value: boolean; expiresAt: number }>();
 const TTL_MS = 10 * 60 * 1000; // 10 минут
 
 async function checkChestnyZnakReal(tnvedCode: string): Promise<boolean> {
-  // В реальном сервисе важны cookies+CSRF, поэтому ходим через Vite middleware.
+  if (USE_DIRECT_EXTERNAL_APIS) {
+    // Эксперимент: прямой запрос из браузера к внешнему сервису без proxy.
+    const body = new URLSearchParams({
+      inputValue: tnvedCode,
+      SITE_ID: 's1',
+    }).toString();
+    const directRes = await fetch(DIRECT_CHECK_ENDPOINT, {
+      method: 'POST',
+      headers: {
+        'Accept': '*/*',
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body,
+    });
+    const json = (await directRes.json().catch(() => null)) as
+      | { data?: { result?: { query?: Record<string, unknown> } }; errors?: Array<{ message?: string }> }
+      | null;
+    if (!directRes.ok || !json) {
+      throw new Error(json?.errors?.[0]?.message ?? `HTTP ${directRes.status}`);
+    }
+    const query = json.data?.result?.query;
+    return query ? Object.keys(query).length > 0 : false;
+  }
+
+  // В реальном сервисе важны cookies+CSRF, поэтому обычно ходим через middleware.
   const res = await fetch(`${CHECK_ENDPOINT}?tnvedCode=${encodeURIComponent(tnvedCode)}`, {
     method: 'GET',
     headers: { 'Accept': 'application/json' },

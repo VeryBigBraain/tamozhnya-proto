@@ -57,21 +57,62 @@ interface TokenCache {
 }
 
 let tokenCache: TokenCache | null = null;
+const USE_DIRECT_EXTERNAL_APIS = import.meta.env.VITE_USE_DIRECT_EXTERNAL_APIS === 'true';
+const FSA_ORIGIN = 'https://pub.fsa.gov.ru';
 
 /**
- * Получает анонимный JWT для ФГИС API через POST /login.
+ * Пытается извлечь JWT из ответа login.
+ */
+function extractJwtFromLoginResponse(
+  headers: Headers,
+  rawBody: string,
+): string {
+  const headerToken =
+    headers.get('authorization')?.replace('Bearer ', '') ??
+    headers.get('x-auth-token') ??
+    headers.get('x-token') ??
+    '';
+
+  const bodyToken = rawBody.trim().replace(/^"|"$/g, '');
+  const token = (headerToken.startsWith('eyJ') ? headerToken : bodyToken);
+
+  if (!token.startsWith('eyJ')) {
+    throw new Error(`ФГИС вернул некорректный токен: "${token.slice(0, 60)}"`);
+  }
+  return token;
+}
+
+/**
+ * Получает анонимный JWT для ФГИС API через прямой браузерный запрос.
+ * Может падать из-за CORS/ограничений источника — в этом случае используем fallback.
+ */
+async function getAnonymousTokenDirect(): Promise<string> {
+  const response = await fetch(`${FSA_ORIGIN}/login`, {
+    method: 'POST',
+    mode: 'cors',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer null',
+    },
+    body: JSON.stringify({ username: 'anonymous', password: 'hrgesf7HDR67Bd' }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Прямой /login вернул ${response.status}`);
+  }
+
+  const rawBody = await response.text();
+  return extractJwtFromLoginResponse(response.headers, rawBody);
+}
+
+/**
+ * Получает анонимный JWT для ФГИС API через локальный прокси.
  * Токен кешируется до истечения срока (с запасом 60 сек).
  *
  * Анонимные credentials публично известны — они встроены в сайт pub.fsa.gov.ru
  * и не дают никаких привилегий сверх публичного доступа к реестрам.
  */
-async function getAnonymousToken(): Promise<string> {
-  const now = Math.floor(Date.now() / 1000);
-
-  if (tokenCache && tokenCache.expiresAt > now + 60) {
-    return tokenCache.token;
-  }
-
+async function getAnonymousTokenViaProxy(): Promise<string> {
   const response = await fetch('/fsa-login', {
     method: 'POST',
     headers: {
@@ -96,9 +137,25 @@ async function getAnonymousToken(): Promise<string> {
   }
 
   const token = data.token ?? '';
+  if (!token.startsWith('eyJ')) throw new Error(`ФГИС вернул некорректный токен: "${token.slice(0, 60)}"`);
+  return token;
+}
 
-  if (!token.startsWith('eyJ')) {
-    throw new Error(`ФГИС вернул некорректный токен: "${token.slice(0, 60)}"`);
+/**
+ * Получает анонимный JWT для ФГИС API.
+ * Стратегия: direct из браузера → fallback на локальный прокси.
+ */
+async function getAnonymousToken(): Promise<string> {
+  const now = Math.floor(Date.now() / 1000);
+  if (tokenCache && tokenCache.expiresAt > now + 60) return tokenCache.token;
+
+  let token = '';
+  try {
+    token = await getAnonymousTokenDirect();
+    console.log('[Росаккредитация] 🔑 Получен токен через direct-запрос');
+  } catch (directErr) {
+    console.warn('[Росаккредитация] ⚠️ Direct /login недоступен, fallback на /fsa-login:', directErr);
+    token = await getAnonymousTokenViaProxy();
   }
 
   const payloadBase64 = token.split('.')[1];
@@ -111,8 +168,9 @@ async function getAnonymousToken(): Promise<string> {
 
 // ─── Real API ─────────────────────────────────────────────────────────────────
 
-/** Базовый URL для Vite proxy → https://pub.fsa.gov.ru/api */
-const FSA_BASE = '/api/fsa';
+/** Базовый URL: через Vite proxy или напрямую к pub.fsa.gov.ru */
+const FSA_BASE = USE_DIRECT_EXTERNAL_APIS ? `${FSA_ORIGIN}/api` : '/api/fsa';
+const FSA_BASE_DIRECT = `${FSA_ORIGIN}/api`;
 
 type FsaEndpoint = 'certificates' | 'declarations';
 
@@ -132,31 +190,46 @@ async function fetchDocumentStatus(
   endpoint: FsaEndpoint,
 ): Promise<CertificateStatus> {
   const token = await getAnonymousToken();
+  const requestBody = JSON.stringify({
+    size: 1,
+    page: 0,
+    filter: {
+      idCertScheme: [],
+      regDate: { startDate: null, endDate: null },
+      endDate:  { startDate: null, endDate: null },
+      columnsSearch: [{ column: 'number', search: docNumber }],
+    },
+    columnsSort: [{ column: 'date', sort: 'DESC' }],
+  });
 
-  const response = await fetch(`${FSA_BASE}/v1/rss/common/${endpoint}/get`, {
+  const requestInit: RequestInit = {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`,
     },
-    body: JSON.stringify({
-      size: 1,
-      page: 0,
-      filter: {
-        idCertScheme: [],
-        regDate: { startDate: null, endDate: null },
-        endDate:  { startDate: null, endDate: null },
-        columnsSearch: [{ column: 'number', search: docNumber }],
-      },
-      columnsSort: [{ column: 'date', sort: 'DESC' }],
-    }),
-  });
+    body: requestBody,
+  };
 
-  if (!response.ok) {
-    throw new Error(`ФГИС API вернул ${response.status}`);
+  let data: { items?: FsaItem[]; total?: number } | null = null;
+  try {
+    const directResponse = await fetch(`${FSA_BASE_DIRECT}/v1/rss/common/${endpoint}/get`, {
+      ...requestInit,
+      mode: 'cors',
+    });
+    if (!directResponse.ok) {
+      throw new Error(`Direct API вернул ${directResponse.status}`);
+    }
+    data = (await directResponse.json()) as { items?: FsaItem[]; total?: number };
+  } catch (directErr) {
+    console.warn('[Росаккредитация] ⚠️ Direct API недоступен, fallback на /api/fsa:', directErr);
+    const proxyResponse = await fetch(`${FSA_BASE}/v1/rss/common/${endpoint}/get`, requestInit);
+    if (!proxyResponse.ok) {
+      throw new Error(`ФГИС API вернул ${proxyResponse.status}`);
+    }
+    data = (await proxyResponse.json()) as { items?: FsaItem[]; total?: number };
   }
 
-  const data = (await response.json()) as { items?: FsaItem[]; total?: number };
   const item = data.items?.[0];
 
   const status = item ? mapIdStatus(item.idStatus) : 'unknown';
