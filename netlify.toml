@@ -1,6 +1,22 @@
 [build]
   command = "npm ci && npm run build"
   publish = "dist"
+  functions = "netlify/functions"
+
+[[redirects]]
+  from = "/fsa-login"
+  to = "/.netlify/functions/fsa-login"
+  status = 200
+
+[[redirects]]
+  from = "/api/fsa/*"
+  to = "/.netlify/functions/fsa-proxy/:splat"
+  status = 200
+
+[[redirects]]
+  from = "/api/chestnyznak/check"
+  to = "/.netlify/functions/chestnyznak-check"
+  status = 200
 
 [[redirects]]
   from = "/*"
